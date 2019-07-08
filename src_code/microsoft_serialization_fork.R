@@ -48,16 +48,20 @@ convertConnectionString <- function(conStr) {
 #
 # Builds and executes a powershell script to save a binary
 # (given as a string file path), into the database.
-dbSaveRaw <- function(connectionString, key, filePath, table="rdata", keyColumn="key", objectColumn="value") {
+dbSaveRaw <- function(connectionString, key, filePath, table="rdata", keyColumn="key", objectColumn="value", description='', model_type='') {
   
-  queryLine <- paste("$query = 'insert into ", table, "([", keyColumn, "],[", objectColumn, "]) values (@key,@value)'", sep="")
+  now = Sys.time()
+  queryLine <- paste("$query = 'insert into ", table, "([", keyColumn, "],[", objectColumn, "],[description],[model_type],[date_added]) values (@key,@value,@description,@model_type,@date_added)'", sep="")
   
   psScript <- paste(
     "[CmdletBinding()]",
     "Param(",
     "[Parameter()]",
     "[string]$ConnectionString,",
-    "[string]$Key,",
+    "[int]$Key,",
+    "[string]$descr,",
+    "[string]$type,",
+    "[datetime]$added,",
     "[string]$File)",
     "[byte[]]$dd = [System.IO.File]::ReadAllBytes($File)",
     "$con = new-object System.Data.SqlClient.SqlConnection($ConnectionString)",
@@ -66,8 +70,14 @@ dbSaveRaw <- function(connectionString, key, filePath, table="rdata", keyColumn=
     "$cmd = new-object System.Data.SqlClient.SqlCommand($query, $con)",
     "$res = $cmd.Parameters.Add('@key', [System.Data.SqlDbType]'VarChar')",
     "$res = $cmd.Parameters.Add('@value', [System.Data.SqlDbType]'VarBinary')",
+    "$res = $cmd.Parameters.Add('@description', [System.Data.SqlDbType]'VarChar')",
+    "$res = $cmd.Parameters.Add('@model_type', [System.Data.SqlDbType]'VarChar')",
+    "$res = $cmd.Parameters.Add('@date_added', [System.Data.SqlDbType]'DateTime')",
     "$res = $cmd.Parameters['@key'].Value = $Key",
     "$res = $cmd.Parameters['@value'].Value = $dd",
+    "$res = $cmd.Parameters['@description'].Value = $descr",
+    "$res = $cmd.Parameters['@model_type'].Value = $type",
+    "$res = $cmd.Parameters['@date_added'].Value = $added",
     "$res = $cmd.ExecuteNonQuery()",
     "$res = $con.Close()",
     sep="\n")
@@ -81,6 +91,12 @@ dbSaveRaw <- function(connectionString, key, filePath, table="rdata", keyColumn=
     scriptFile,
     " -Key ",
     key,
+    " -descr ",
+    sprintf("'%s'", description),
+    " -type ",
+    sprintf("'%s'", model_type),
+    " -added ",
+    sprintf("'%s'", now),
     " -File ",
     filePath,
     " -ConnectionString ",
@@ -144,13 +160,14 @@ dbReadRaw <- function(connectionString, key, filePath, table="rdata", keyColumn=
 # a character string (key).
 # The table name, the name of the key column and the name of the object column can
 # be controlled by the table, keyColumn and objectColumn parameters.
-dbSaveRDS <- function(connectionString, key, object, table="rdata", keyColumn="key", objectColumn="value", compress=F) {
+dbSaveRDS <- function(connectionString, key, object, table="rdata", keyColumn="key", objectColumn="value", description='', model_type='', compress=F) {
   
   rawCon <- tempfile()
   on.exit(unlink(rawCon))
   saveRDS(object, rawCon, compress=compress)
   
-  dbSaveRaw(connectionString, key, filePath=rawCon, table=table, keyColumn=keyColumn, objectColumn=objectColumn)    
+  dbSaveRaw(connectionString, key, filePath=rawCon, table=table, keyColumn=keyColumn, 
+            objectColumn=objectColumn, description=description, model_type=model_type)    
   
 }
 
