@@ -7,11 +7,10 @@ library(lubridate)
 raw_data <- read.csv("data/raw/raw_data.csv")
 
 # Remove leading and trailing whitespace
-raw_data <- as.tibble(lapply(raw_data, trimws), stringsAsFactors = FALSE)
+raw_data <- as.data.frame(lapply(raw_data, trimws))
 
 # Change to numeric
-columns_to_replace = c("Amount_current", 
-                       "numEngagements", "SalesLeadId",
+columns_to_replace = c("Amount_current","SalesLeadId",
                        "CalcProbability", "num_sales_leads", 
                        "num_projects_won", "num_ROM_Quoted",
                        "num_Quoted_FEE", "num_Awarded_FEE", 
@@ -28,24 +27,20 @@ summary(is.na(raw_data))
 # Calc prob set to 1 because these are typically leads early in the pipeline
 raw_data$CalcProbability[is.na(raw_data$CalcProbability)] <- 1
 # Replace with the most commonly occuring values
-raw_data[,c("Instinct_Factor_Id")] <- names(sort(table(raw_data[,c("Instinct_Factor_Id")]), 
-                                                 decreasing = TRUE)[1])
-raw_data[,c("Driver_Value_Id")] <- names(sort(table(raw_data[,c("Driver_Value_Id")]), 
-                                              decreasing = TRUE)[1])
+instinct_table <- table(raw_data[,c("Instinct_Factor_Id")])
+raw_data$Instinct_Factor_Id[is.na(raw_data$Instinct_Factor_Id)] <- names(sort(instinct_table, decreasing = TRUE)[1])
+driver_table <- table(raw_data[,c("Driver_Value_Id")])
+raw_data$Driver_Value_Id[is.na(raw_data$Driver_Value_Id)] <- names(sort(driver_table, decreasing = TRUE)[1])
+
 # Ignore these columns since they will be used later or dropped from the data frame
 ignore <- c("CloseReasonId", "ActionDate",  
             "CloseReasonDate", "CloseReasonDate_current", 
             "CloseReason_current", "Amount_current")
+
 # Reassign NA values to 0
 # since values are missing in clusters only for earlier records for some leads
-raw_data[rowSums(is.na(raw_data[,!names(raw_data) %in% ignore])) > 0,
-         !names(raw_data) %in% ignore] <- 
-  raw_data %>% 
-  select(-c(CloseReasonId, ActionDate, 
-          CloseReasonDate, CloseReasonDate_current, 
-          CloseReason_current, Amount_current)) %>% 
-  filter(!complete.cases(.)) %>% 
-  mutate_if(is.character , replace_na, replace = 0)
+do_not_ignore <- !names(raw_data) %in% ignore
+raw_data[do_not_ignore][is.na(raw_data[do_not_ignore])] <- as.factor("0")
 
 # Create a variable for the days difference in CreatedDate 
 # from an arbitrary baseline ('2016-01-01')
@@ -238,10 +233,3 @@ mapply(write.csv,
        row.names = FALSE, 
        file = paste0("data/clean/flattened_", names(model_data), ".csv")
        )
-
-# Write the long data to csv files
-mapply(write.csv, 
-       data_list, 
-       row.names = FALSE, 
-       file = paste0("data/clean/long_format_", names(data_list), ".csv")
-)
